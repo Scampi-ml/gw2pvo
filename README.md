@@ -1,8 +1,6 @@
 
 # gw2pvo
 
-**This repository is unmaintained. New maintainer(s) are welcomed.**
-
 gw2pvo is a command line tool to upload solar data from a GoodWe power inverter to the PVOutput.org website.
 
 ## Installation

@@ -17,6 +17,7 @@ from astral.location import Location
 
 from gw2pvo import ds_api
 from gw2pvo import gw_api
+from gw2pvo import ow_api
 from gw2pvo import netatmo_api
 from gw2pvo import gw_csv
 from gw2pvo import pvo_api
@@ -46,17 +47,20 @@ def get_temperature(settings, latitude, longitude):
     elif settings.darksky_api_key:
         ds = ds_api.DarkSkyApi(settings.darksky_api_key)
         return ds.get_temperature(latitude, longitude)
+    elif settings.openweather_api_key:
+        ow = ow_api.OpenWeatherApi(settings.openweather_api_key)
+        return ow.get_temperature(latitude, longitude)        
     return None
 
 def run_once(settings, city):
     global last_eday_kwh
 
     # Check if we only want to run during daylight
-    if city:
-        now = datetime.time(datetime.now())
-        if now < city.dawn().time() or now > city.dusk().time():
-            logging.debug("Skipped upload as it's night")
-            return
+    # if city:
+    #     now = datetime.time(datetime.now())
+    #     if now < city.dawn().time() or now > city.dusk().time():
+    #         logging.debug("Skipped upload as it's night")
+    #         return
 
     # Fetch the last reading from GoodWe
     gw = gw_api.GoodWeApi(settings.gw_station_id, settings.gw_account, settings.gw_password)
@@ -95,7 +99,11 @@ def run_once(settings, city):
 
     if settings.pvo_system_id and settings.pvo_api_key:
         pvo = pvo_api.PVOutputApi(settings.pvo_system_id, settings.pvo_api_key)
-        pvo.add_status(data['pgrid_w'], last_eday_kwh, data.get('temperature'), voltage)
+        pvo.add_status(data['pgrid_w'], last_eday_kwh,
+                       data.get('temperature'),
+                       voltage,
+                       data['load_total_kwh'],
+                       data['pload_w'])
     else:
         logging.debug(str(data))
         logging.warning("Missing PVO id and/or key")
@@ -111,6 +119,9 @@ def copy(settings):
         if settings.darksky_api_key:
             ds = ds_api.DarkSkyApi(settings.darksky_api_key)
             temperatures = ds.get_temperature_for_day(data['latitude'], data['longitude'], date)
+        elif settings.openweather_api_key:
+            ow = ow_api.OpenWeatherApi(settings.openweather_api_key)
+            temperatures = ow.get_temperature_for_day(data['latitude'], data['longitude'], date)
         else:
             temperatures = None
 
@@ -119,10 +130,12 @@ def copy(settings):
         pvo.add_day(data['entries'], temperatures)
     else:
         for entry in data['entries']:
-            logging.info("{}: {:6.0f} W {:6.2f} kWh".format(
+            logging.info("{}: {:6.0f} W {:6.2f} kWh {:6.0f} W {:6.2f} kWh".format(
                 entry['dt'],
                 entry['pgrid_w'],
                 entry['eday_kwh'],
+                entry['pload_w'],
+                entry['ploadday_kwh']
             ))
         logging.warning("Missing PVO id and/or key")
 
@@ -162,6 +175,7 @@ def run():
     parser.add_argument("--pvo-api-key", help="PVOutput API key", metavar='KEY')
     parser.add_argument("--pvo-interval", help="PVOutput interval in minutes", type=int, choices=[5, 10, 15])
     parser.add_argument("--darksky-api-key", help="Dark Sky Weather API key")
+    parser.add_argument("--openweather-api-key", help="Open Weather API key")
     parser.add_argument("--netatmo-username", help="Netatmo username")
     parser.add_argument("--netatmo-password", help="Netatmo password")
     parser.add_argument("--netatmo-client-id", help="Netatmo OAuth client id")
